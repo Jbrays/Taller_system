@@ -7,6 +7,13 @@ import './App.css';
 
 const API_URL = 'https://scabrous-nestor-geometrically.ngrok-free.dev/api';
 
+// Configuración global para evitar la página de advertencia de ngrok
+const API_CONFIG = {
+  headers: {
+    'ngrok-skip-browser-warning': 'true'
+  }
+};
+
 // Creamos un contexto para compartir la configuración
 export const AppContext = React.createContext();
 
@@ -45,7 +52,9 @@ function App() {
     try {
       setLoading(true);
       setError('');
-      const response = await axios.get(`${API_URL}/courses/structure/${config.syllabusFolderId}`);
+      
+      // Configurar headers para evitar la página de advertencia de ngrok
+      const response = await axios.get(`${API_URL}/courses/structure/${config.syllabusFolderId}`, API_CONFIG);
       
       // Debug: Ver toda la respuesta
       console.log('Respuesta completa:', response);
@@ -189,7 +198,7 @@ function App() {
         course_name: courseName,
         cv_folder_id: config.cvFolderId,
         syllabus_folder_id: config.syllabusFolderId
-      });
+      }, API_CONFIG);
       
       console.log('Rankings recibidos:', response.data);
       console.log('Estructura de recommendations:', response.data.recommendations);
@@ -220,7 +229,7 @@ function App() {
       const response = await axios.post(`${API_URL}/sync`, {
         cv_folder_id: config.cvFolderId,
         syllabus_folder_id: config.syllabusFolderId
-      });
+      }, API_CONFIG);
       
       console.log('Sincronización completada:', response.data);
       setSyncStatus({
