@@ -1,4 +1,4 @@
-# Sistema de Emparejamiento Docente-Curso
+# Sistema de Emparejamiento 
 
 Sistema inteligente para recomendar docentes ideales para cursos académicos basado en análisis de CVs y sílabos usando técnicas de procesamiento de lenguaje natural.
 
@@ -63,14 +63,6 @@ El frontend se despliega automáticamente en Netlify desde este repositorio.
 2. **Sincronización**: Procesar CVs y sílabos automáticamente
 3. **Navegación**: Explorar por ciclos académicos y cursos
 4. **Recomendaciones**: Obtener rankings de docentes por curso
-
-## 📊 Algoritmo de Recomendación
-
-El sistema utiliza múltiples factores para generar recomendaciones:
-- Similitud semántica (40%)
-- Experiencia relevante (30%)
-- Formación académica (20%)
-- Disponibilidad (10%)
 
 ## 📁 Estructura de Google Drive
 
