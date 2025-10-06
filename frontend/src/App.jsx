@@ -51,6 +51,16 @@ function App() {
       // Debug: Ver qué datos estamos recibiendo
       console.log('Estructura recibida:', structure);
       console.log('Llaves de la estructura:', Object.keys(structure));
+      console.log('Tipo de estructura:', typeof structure);
+      
+      // Verificar si la estructura está vacía
+      if (!structure || Object.keys(structure).length === 0) {
+        setError(`No se encontraron carpetas en el ID proporcionado. 
+                  Verifica que la carpeta de sílabos tenga subcarpetas con nombres como "Ciclo 01", "Ciclo I", etc.
+                  ID de carpeta utilizado: ${config.syllabusFolderId}`);
+        setCycles([]);
+        return;
+      }
       
       // Ahora el backend devuelve los nombres reales de las carpetas
       // Extraer y procesar los ciclos de la estructura
@@ -104,7 +114,22 @@ function App() {
       setCycles(cycleList);
     } catch (err) {
       console.error('Error loading cycles:', err);
-      setError('Error al cargar los ciclos desde Google Drive');
+      
+      // Mensaje de error más detallado
+      let errorMessage = 'Error al cargar los ciclos desde Google Drive.';
+      
+      if (err.response) {
+        errorMessage += ` Estado: ${err.response.status}`;
+        if (err.response.data && err.response.data.detail) {
+          errorMessage += `. Detalle: ${err.response.data.detail}`;
+        }
+      } else if (err.request) {
+        errorMessage += ' No se pudo conectar con el servidor backend.';
+      } else {
+        errorMessage += ` Error: ${err.message}`;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
