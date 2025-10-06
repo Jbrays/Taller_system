@@ -1,0 +1,27 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# PyTorch for CPU
+torch
+torchvision
+
+# NLP & ML
+sentence-transformers
+spacy
+scikit-learn
+shap
+
+# Backend Framework
+fastapi
+uvicorn
+pydantic
+
+# Google & Firebase
+firebase-admin
+google-api-python-client
+
+# Data Handling
+pypdf2
+chromadb
+
+# Utilities
+python-dotenv
