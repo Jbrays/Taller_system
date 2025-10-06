@@ -11,7 +11,15 @@ app = FastAPI(
 # Configurar CORS para permitir el frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"],  # URLs del frontend de Vite
+    allow_origins=[
+        "http://localhost:5173", 
+        "http://127.0.0.1:5173", 
+        "http://localhost:5174", 
+        "http://127.0.0.1:5174",
+        "https://*.netlify.app",  # Permitir todos los subdominios de Netlify
+        "https://netlify.app",
+        "*"  # Permitir todos los orígenes (solo para desarrollo/demo)
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
