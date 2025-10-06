@@ -46,7 +46,28 @@ function App() {
       setLoading(true);
       setError('');
       const response = await axios.get(`${API_URL}/courses/structure/${config.syllabusFolderId}`);
+      
+      // Debug: Ver toda la respuesta
+      console.log('Respuesta completa:', response);
+      console.log('Response data:', response.data);
+      console.log('Response data structure:', response.data?.structure);
+      
+      // Validar que la respuesta tiene la estructura esperada
+      if (!response.data || typeof response.data !== 'object') {
+        setError(`Respuesta inválida del servidor. Respuesta recibida: ${JSON.stringify(response.data)}`);
+        setCycles([]);
+        return;
+      }
+      
       const structure = response.data.structure;
+      
+      // Validar que structure existe y es un objeto
+      if (!structure || typeof structure !== 'object') {
+        setError(`Estructura de datos inválida. Estructura recibida: ${JSON.stringify(structure)}. 
+                  ID de carpeta: ${config.syllabusFolderId}`);
+        setCycles([]);
+        return;
+      }
       
       // Debug: Ver qué datos estamos recibiendo
       console.log('Estructura recibida:', structure);
@@ -54,7 +75,7 @@ function App() {
       console.log('Tipo de estructura:', typeof structure);
       
       // Verificar si la estructura está vacía
-      if (!structure || Object.keys(structure).length === 0) {
+      if (Object.keys(structure).length === 0) {
         setError(`No se encontraron carpetas en el ID proporcionado. 
                   Verifica que la carpeta de sílabos tenga subcarpetas con nombres como "Ciclo 01", "Ciclo I", etc.
                   ID de carpeta utilizado: ${config.syllabusFolderId}`);
