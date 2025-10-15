@@ -3,7 +3,8 @@ import axios from 'axios';
 import { AppContext } from '../App';
 import { ArrowLeft, FolderFill, FileText, Trophy, ChevronRight } from 'react-bootstrap-icons';
 
-const API_URL = 'http://127.0.0.1:8001/api';
+// 🔧 Usar ngrok URL para producción, localhost para desarrollo
+const API_URL = 'https://scabrous-nestor-geometrically.ngrok-free.dev/api';
 
 function MainView() {
   const { config } = useContext(AppContext);
