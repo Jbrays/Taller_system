@@ -25,8 +25,9 @@ class IntelligentNERService:
             print("❌ ERROR: Modelo de spaCy 'es_core_news_sm' no encontrado.")
             self.nlp = None
         
-        # Stopwords en español (palabras comunes a ignorar)
+        # Stopwords en español + términos de CV/administrativos a ignorar
         self.stopwords = {
+            # Artículos, preposiciones, conjunciones
             'el', 'la', 'de', 'que', 'y', 'a', 'en', 'un', 'ser', 'se', 'no', 'haber', 'por', 
             'con', 'su', 'para', 'como', 'estar', 'tener', 'le', 'lo', 'todo', 'pero', 'más',
             'hacer', 'o', 'poder', 'decir', 'este', 'ir', 'otro', 'ese', 'la', 'si', 'me', 'ya',
@@ -36,10 +37,48 @@ class IntelligentNERService:
             'tiempo', 'ella', 'sí', 'día', 'uno', 'bien', 'poco', 'deber', 'entonces', 'poner',
             'cosa', 'tanto', 'hombre', 'parecer', 'nuestro', 'tan', 'donde', 'ahora', 'parte',
             'después', 'vida', 'quedar', 'siempre', 'creer', 'hablar', 'llevar', 'dejar', 'nada',
-            'cada', 'seguir', 'menos', 'nuevo', 'encontrar', 'algo', 'solo', 'decir', 'hecho',
-            'año', 'años', 'mes', 'meses', 'día', 'días', 'universidad', 'universidad privada',
+            'cada', 'seguir', 'menos', 'nuevo', 'encontrar', 'algo', 'solo', 'hecho',
+            
+            # Temporal
+            'año', 'años', 'mes', 'meses', 'día', 'días', 'fecha', 'periodo', 'duración',
+            
+            # Títulos académicos
             'ing', 'ingeniero', 'ingeniera', 'licenciado', 'licenciada', 'bachiller', 'magister',
-            'maestro', 'maestra', 'doctor', 'doctora', 'profesor', 'profesora', 'docente'
+            'maestro', 'maestra', 'doctor', 'doctora', 'profesor', 'profesora', 'docente',
+            'magíster', 'phd', 'mba', 'master', 'diplomado', 'técnico', 'profesional',
+            
+            # Instituciones (nombres comunes)
+            'universidad', 'instituto', 'colegio', 'escuela', 'facultad', 'departamento',
+            'centro', 'académica', 'academia', 'educación', 'educativa', 'educativo',
+            
+            # Metadatos de CV
+            'contacto', 'correo', 'teléfono', 'celular', 'dirección', 'domicilio', 'email',
+            'electrónico', 'datos', 'personales', 'información', 'perfil', 'resumen',
+            'objetivo', 'referencias', 'disponibilidad',
+            
+            # Administrativo/burocrático
+            'registro', 'licencia', 'certificado', 'título', 'diploma', 'grado', 'cargo',
+            'puesto', 'área', 'departamento', 'división', 'gerencia', 'jefatura',
+            'coordinación', 'dirección', 'vicerrectorado', 'rectorado', 'decanato',
+            'membresía', 'asociación', 'organización', 'institución', 'empresa', 'entidad',
+            
+            # Términos genéricos de CV
+            'experiencia', 'laboral', 'actividades', 'funciones', 'responsabilidades',
+            'logros', 'honores', 'premios', 'distinciones', 'reconocimientos',
+            'publicaciones', 'investigación', 'capacitaciones', 'cursos', 'seminarios',
+            'talleres', 'conferencias', 'ponencias', 'idiomas', 'nivel', 'básico',
+            'intermedio', 'avanzado', 'nativo', 'hablado', 'escrito', 'lectura',
+            
+            # Modalidades de trabajo
+            'tiempo', 'completo', 'parcial', 'dedicación', 'contratado', 'nombrado',
+            'ordinario', 'extraordinario', 'auxiliar', 'jefe', 'asistente', 'principal',
+            
+            # Ubicaciones comunes Perú (UPAO específico)
+            'trujillo', 'lima', 'perú', 'privada', 'antenor', 'orrego', 'upao',
+            'española', 'españa', 'internacional', 'nacional', 'regional', 'local',
+            
+            # Términos de clasificación
+            'disciplina', 'área', 'campo', 'especialidad', 'rama', 'sector', 'ámbito'
         }
         
         # Contextos que indican skills (para análisis contextual)
@@ -112,8 +151,12 @@ class IntelligentNERService:
         # 6. Análisis de frecuencia: palabras que aparecen múltiples veces pero no son comunes
         word_freq = self._calculate_word_frequency(text_lower)
         for word, freq in word_freq.items():
-            if freq >= 2 and len(word) > 4 and word not in self.stopwords:
-                # Si aparece frecuentemente, probablemente es relevante
+            # Aumentar umbral a 3+ para reducir ruido
+            # Priorizar si contiene términos técnicos típicos
+            is_technical = any(tech in word for tech in ['data', 'soft', 'arch', 'eng', 'dev', 'sys', 'tech', 'web'])
+            min_freq = 2 if is_technical else 3
+            
+            if freq >= min_freq and len(word) > 4 and word not in self.stopwords:
                 candidate_skills.add(word)
         
         # 7. Filtrado final: eliminar ruido
@@ -129,9 +172,9 @@ class IntelligentNERService:
         # Contar frecuencias
         freq = Counter(words)
         
-        # Filtrar palabras muy comunes
+        # Filtrar palabras muy comunes y aumentar umbral a 3+
         filtered_freq = {word: count for word, count in freq.items() 
-                        if word not in self.stopwords and count >= 2}
+                        if word not in self.stopwords and count >= 3}
         
         return filtered_freq
     
@@ -149,30 +192,51 @@ class IntelligentNERService:
         """
         filtered = set()
         
+        # Nombres propios comunes en Perú (para filtrar nombres de personas en CVs)
+        common_names = {
+            'hernan', 'teobaldo', 'sagastegui', 'chigne', 'juan', 'carlos', 'maria',
+            'jose', 'luis', 'ana', 'pedro', 'jorge', 'miguel', 'rosa', 'carmen',
+            'garcia', 'rodriguez', 'martinez', 'lopez', 'gonzalez', 'perez', 'sanchez'
+        }
+        
         for candidate in candidates:
             # Eliminar palabras muy cortas o muy largas
             if len(candidate) < 3 or len(candidate) > 50:
                 continue
             
-            # Eliminar si es solo números
-            if candidate.isdigit():
+            # Eliminar si es solo números o solo 1-2 letras
+            if candidate.isdigit() or len(candidate) <= 2:
                 continue
             
             # Eliminar si es stopword
-            if candidate in self.stopwords:
+            if candidate.lower() in self.stopwords:
+                continue
+            
+            # Eliminar nombres propios de personas
+            if candidate.lower() in common_names:
                 continue
             
             # Eliminar si contiene muchos espacios (probablemente una frase completa)
-            if candidate.count(' ') > 3:
+            if candidate.count(' ') > 4:
                 continue
             
             # Eliminar palabras muy genéricas
-            generic_words = ['trabajo', 'experiencia', 'conocimiento', 'proyecto', 'desarrollo']
-            if candidate in generic_words:
+            generic_words = ['trabajo', 'experiencia', 'conocimiento', 'proyecto', 
+                           'desarrollo', 'implementación', 'gestión', 'servicio',
+                           'proceso', 'sistema', 'general', 'específico', 'particular']
+            if candidate.lower() in generic_words:
+                continue
+            
+            # Eliminar siglas de menos de 2 letras (probable ruido)
+            if candidate.isupper() and len(candidate) < 2:
+                continue
+            
+            # Eliminar si empieza/termina con espacio o caracteres raros
+            if candidate.strip() != candidate or any(c in candidate for c in ['_', '|', '@', '#']):
                 continue
             
             # Si pasa todos los filtros, agregarlo
-            filtered.add(candidate)
+            filtered.add(candidate.lower())
         
         return filtered
     
