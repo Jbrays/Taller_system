@@ -80,7 +80,11 @@ function MainView() {
       setRecommendations(null);
       setError('');
       
-      const response = await axios.get(`${API_URL}/recommendations/${course.id}`);
+      // 🆕 Usar el nuevo endpoint híbrido SQL + ChromaDB
+      const response = await axios.post(`${API_URL}/recommendations/generate-hybrid`, {
+        cycle_name: currentCycle.name,
+        course_name: course.name
+      });
       setRecommendations(response.data);
       setCurrentView('recommendations');
     } catch (err) {
@@ -228,32 +232,49 @@ function MainView() {
                 </tr>
               </thead>
               <tbody>
-                {recommendations.recommendations.map((rec, index) => (
-                  <tr key={index}>
-                    <td className="ranking-cell">
-                      <div className="ranking-badge">{index + 1}</div>
-                    </td>
-                    <td>{rec.teacher_name}</td>
-                    <td className="score-cell">{rec.final_score}%</td>
-                    <td className="components-cell">
-                      <div>
-                        <small>Semántico: {rec.component_scores.semantic_similarity}%</small><br/>
-                        <small>Habilidades: {rec.component_scores.skill_match}%</small><br/>
-                        <small>Experiencia: {rec.component_scores.experience_match}%</small>
-                      </div>
-                    </td>
-                    <td className="skills-cell">
-                      {rec.explanation.matching_skills?.length > 0 ? (
-                        <span className="matching-skills">
-                          {rec.explanation.matching_skills.slice(0, 3).join(', ')}
-                          {rec.explanation.matching_skills.length > 3 && '...'}
-                        </span>
-                      ) : (
-                        <span className="no-skills">Sin coincidencias específicas</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {recommendations.recommendations.map((rec, index) => {
+                  // 🆕 Compatibilidad con endpoint híbrido (score 0-1) vs antiguo (final_score 0-100)
+                  const finalScore = rec.final_score ? rec.final_score : (rec.score * 100).toFixed(1);
+                  const semanticScore = rec.component_scores.semantic_similarity ? 
+                    (rec.component_scores.semantic_similarity > 1 ? 
+                      rec.component_scores.semantic_similarity : 
+                      (rec.component_scores.semantic_similarity * 100).toFixed(1)) : 
+                    'N/A';
+                  const sqlScore = rec.component_scores.sql_score ? 
+                    (rec.component_scores.sql_score * 100).toFixed(1) : 
+                    rec.component_scores.skill_match || 'N/A';
+                  const experienceScore = rec.component_scores.experience_match || 'N/A';
+                  
+                  // Compatibilidad: matched_skills (híbrido) o matching_skills (antiguo)
+                  const matchedSkills = rec.explanation.matched_skills || rec.explanation.matching_skills || [];
+                  
+                  return (
+                    <tr key={index}>
+                      <td className="ranking-cell">
+                        <div className="ranking-badge">{index + 1}</div>
+                      </td>
+                      <td>{rec.teacher_name}</td>
+                      <td className="score-cell">{finalScore}%</td>
+                      <td className="components-cell">
+                        <div>
+                          <small>Semántico: {semanticScore}%</small><br/>
+                          <small>SQL Skills: {sqlScore}%</small><br/>
+                          {experienceScore !== 'N/A' && <small>Experiencia: {experienceScore}%</small>}
+                        </div>
+                      </td>
+                      <td className="skills-cell">
+                        {matchedSkills.length > 0 ? (
+                          <span className="matching-skills">
+                            {matchedSkills.slice(0, 3).join(', ')}
+                            {matchedSkills.length > 3 && ` (+${matchedSkills.length - 3} más)`}
+                          </span>
+                        ) : (
+                          <span className="no-skills">Sin coincidencias específicas</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
