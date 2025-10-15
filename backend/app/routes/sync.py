@@ -3,7 +3,7 @@ from ..models.sync_models import SyncRequest, SyncResponse
 from ..services.drive_service import DriveService
 from ..services.pdf_service import PDFService
 from ..services.nlp_service import NLPService
-from ..services.ner_service import NERService
+from ..services.intelligent_ner_service import IntelligentNERService
 from ..services.database_service import DatabaseService
 from ..services.sql_database_service import SQLDatabaseService
 
@@ -13,7 +13,7 @@ router = APIRouter()
 drive_service = DriveService()
 pdf_service = PDFService()
 nlp_service = NLPService()
-ner_service = NERService()
+intelligent_ner_service = IntelligentNERService()
 db_service = DatabaseService()  # ChromaDB (vectorial)
 sql_db_service = SQLDatabaseService()  # SQLite (relacional)
 
@@ -37,11 +37,11 @@ def process_file(file_id: str, file_name: str, collection_name: str, cycle_name:
         print(f"  -> Error al generar embedding. Saltando.")
         return False
 
-    # Extraer entidades con NER
+    # Extraer entidades con NER inteligente (sin diccionario)
     if collection_name == "cvs":
-        entities = ner_service.extract_entities_from_cv(text)
+        entities = intelligent_ner_service.extract_entities_from_cv(text)
     else:  # syllabi
-        entities = ner_service.extract_entities_from_syllabus(text)
+        entities = intelligent_ner_service.extract_entities_from_syllabus(text)
     
     # Incluir tanto el texto original como las entidades extraídas en metadata
     metadata = {

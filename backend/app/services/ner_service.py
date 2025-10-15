@@ -21,13 +21,30 @@ class NERService:
             print("Instálalo con: python -m spacy download es_core_news_sm")
             self.nlp = None
 
-        # Patrones de habilidades técnicas comunes
+        # Patrones de habilidades técnicas comunes (expandido para contexto académico)
         self.technical_skills = {
-            'languages': ['python', 'java', 'javascript', 'c++', 'c#', 'php', 'ruby', 'go', 'rust', 'scala', 'kotlin'],
-            'frameworks': ['react', 'angular', 'vue', 'django', 'flask', 'spring', 'laravel', 'rails', 'express'],
-            'databases': ['mysql', 'postgresql', 'mongodb', 'redis', 'oracle', 'sqlite', 'cassandra'],
-            'tools': ['git', 'docker', 'kubernetes', 'jenkins', 'aws', 'azure', 'gcp', 'linux', 'nginx'],
-            'ml_ai': ['machine learning', 'deep learning', 'tensorflow', 'pytorch', 'scikit-learn', 'pandas', 'numpy']
+            'languages': ['python', 'java', 'javascript', 'c++', 'c#', 'php', 'ruby', 'go', 'rust', 'scala', 'kotlin', 
+                         'r', 'matlab', 'sql', 'typescript', 'swift', 'objective-c', 'perl', 'shell', 'bash'],
+            'frameworks': ['react', 'angular', 'vue', 'django', 'flask', 'spring', 'laravel', 'rails', 'express',
+                          'fastapi', 'nestjs', '.net', 'asp.net', 'hibernate', 'spring boot', 'node.js', 'next.js'],
+            'databases': ['mysql', 'postgresql', 'mongodb', 'redis', 'oracle', 'sqlite', 'cassandra', 'sql server',
+                         'mariadb', 'dynamodb', 'elasticsearch', 'neo4j', 'firebase', 'bigquery'],
+            'tools': ['git', 'docker', 'kubernetes', 'jenkins', 'aws', 'azure', 'gcp', 'linux', 'nginx', 'apache',
+                     'gitlab', 'github', 'bitbucket', 'jira', 'confluence', 'terraform', 'ansible', 'vagrant'],
+            'ml_ai': ['machine learning', 'deep learning', 'tensorflow', 'pytorch', 'scikit-learn', 'pandas', 'numpy',
+                     'keras', 'neural networks', 'nlp', 'computer vision', 'reinforcement learning', 'xgboost',
+                     'inteligencia artificial', 'redes neuronales', 'procesamiento de lenguaje natural'],
+            'analytics': ['data analytics', 'business intelligence', 'tableau', 'power bi', 'looker', 'qlik',
+                         'google analytics', 'bigdata', 'data mining', 'estadística', 'analítica de datos',
+                         'learning analytics', 'data science', 'analytics', 'visualización de datos'],
+            'methodologies': ['agile', 'scrum', 'kanban', 'devops', 'ci/cd', 'tdd', 'bdd', 'waterfall', 'lean',
+                            'xp', 'cmmi', 'iso', 'itil', 'cobit', 'prince2', 'metodologías ágiles'],
+            'education_tech': ['e-learning', 'lms', 'moodle', 'blackboard', 'canvas', 'educational technology',
+                              'tecnología educativa', 'plataformas de aprendizaje', 'mooc', 'realidad aumentada',
+                              'augmented reality', 'realidad virtual', 'gamificación', 'serious games'],
+            'software_eng': ['ingeniería de software', 'arquitectura de software', 'diseño de software', 'uml',
+                            'patrones de diseño', 'calidad de software', 'testing', 'qa', 'pruebas de software',
+                            'gestión de proyectos', 'project management', 'desarrollo de software']
         }
 
     def extract_entities_from_cv(self, cv_text: str) -> Dict:
@@ -79,26 +96,47 @@ class NERService:
 
     def _extract_technical_skills(self, text: str) -> List[str]:
         """Extrae habilidades técnicas del texto."""
-        found_skills = []
+        found_skills = set()
         
+        # Primero buscar términos multi-palabra (más específicos)
+        multi_word_terms = [
+            'machine learning', 'deep learning', 'data science', 'business intelligence',
+            'learning analytics', 'augmented reality', 'realidad aumentada', 'realidad virtual',
+            'inteligencia artificial', 'redes neuronales', 'procesamiento de lenguaje natural',
+            'ingeniería de software', 'arquitectura de software', 'calidad de software',
+            'gestión de proyectos', 'project management', 'desarrollo de software',
+            'tecnología educativa', 'educational technology', 'computer vision',
+            'neural networks', 'reinforcement learning', 'data analytics', 'data mining',
+            'spring boot', 'visual studio', 'sql server', 'power bi', 'google analytics',
+            'metodologías ágiles'
+        ]
+        
+        for term in multi_word_terms:
+            if term in text:
+                found_skills.add(term)
+        
+        # Luego buscar skills individuales del diccionario
         for category, skills in self.technical_skills.items():
             for skill in skills:
-                if skill in text:
-                    found_skills.append(skill)
+                # Evitar agregar si ya encontramos la versión multi-palabra
+                # Ej: si encontramos "machine learning", no agregar "machine" ni "learning"
+                if skill in text and not any(skill in found_term for found_term in found_skills):
+                    found_skills.add(skill)
         
-        # Buscar patrones adicionales
+        # Buscar patrones adicionales con regex
         additional_patterns = [
             r'\b(html5?|css3?|sass|scss)\b',
             r'\b(api|rest|graphql|microservices)\b',
-            r'\b(agile|scrum|kanban)\b',
-            r'\b(devops|ci/cd)\b'
+            r'\b(uml|mvc|mvvm|solid)\b',
+            r'\b(ci/cd|devops)\b',
+            r'\b(iso\s?\d+|cmmi|itil|cobit)\b'
         ]
         
         for pattern in additional_patterns:
             matches = re.findall(pattern, text, re.IGNORECASE)
-            found_skills.extend(matches)
+            found_skills.update(matches)
         
-        return list(set(found_skills))  # Eliminar duplicados
+        return list(found_skills)
 
     def _extract_experience_years(self, text: str) -> int:
         """Extrae años de experiencia del CV."""
