@@ -130,6 +130,20 @@ class IntelligentNERService:
                 if any(indicator in chunk_text for indicator in technical_indicators):
                     candidate_skills.add(chunk_text)
         
+        # 2b. Extraer bigramas técnicos (pares de palabras consecutivas)
+        # Para capturar "machine learning", "data analytics" que no siempre forman noun chunks
+        words = text_lower.split()
+        for i in range(len(words) - 1):
+            bigram = f"{words[i]} {words[i+1]}"
+            # Lista de bigramas técnicos comunes
+            technical_bigrams = ['machine learning', 'deep learning', 'data analytics', 
+                                'learning analytics', 'artificial intelligence', 'augmented reality',
+                                'virtual reality', 'data science', 'software engineering',
+                                'web development', 'mobile development', 'cloud computing',
+                                'network security', 'information security', 'database management']
+            if bigram in technical_bigrams:
+                candidate_skills.add(bigram)
+        
         # 3. Extraer sustantivos propios y técnicos individuales (análisis sintáctico)
         for token in doc:
             # Sustantivos propios o sustantivos que parecen técnicos
