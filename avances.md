@@ -75,14 +75,7 @@ Se desarrolló exitosamente un **Sistema de Emparejamiento Docente-Curso** que u
 - **Formación académica**: 20% (títulos y certificaciones)
 - **Disponibilidad**: 10% (factor complementario)
 
-### 🗓️ Semana 6: Frontend y Despliegue (Fecha: [completar])
-**Actividades realizadas:**
-- ✅ Desarrollo de interfaz React moderna y responsive
-- ✅ Implementación de navegación por ciclos y cursos
-- ✅ Sistema de configuración de Google Drive
-- ✅ Sincronización automática de datos
-- ✅ Despliegue en la nube (Netlify + ngrok)
-- ✅ Configuración de repositorio GitHub
+
 
 **Evidencias:**
 - **[Colocar imagen de]** Interfaz principal del sistema funcionando
