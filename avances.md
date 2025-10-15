@@ -7,6 +7,41 @@
 
 ---
 
+## 🆕 ACTUALIZACIÓN: ARQUITECTURA HÍBRIDA SQL + ChromaDB
+
+### 📅 Fecha de Implementación: [Hoy]
+
+Se implementó una **arquitectura híbrida** que combina:
+- **SQLite (SQLAlchemy):** Base de datos relacional para metadata estructurada
+- **ChromaDB:** Base de datos vectorial para búsqueda semántica
+
+**Problema resuelto:**
+- ❌ Antes: Skills almacenadas como strings separados por comas en ChromaDB
+- ✅ Ahora: Skills normalizadas en tabla SQL con relaciones many-to-many
+
+**Ventajas:**
+- ✅ Queries relacionales complejas (ej: "docentes con Python Y Django")
+- ✅ Skills sin duplicados (python = Python = py)
+- ✅ Matching más preciso: 40% SQL (skills exactas) + 60% Semántico
+- ✅ Estadísticas en tiempo real (top skills, skill gaps)
+- ✅ Historial de matches
+
+**Archivos implementados:**
+1. `backend/app/models/db_models.py` - Modelos SQLAlchemy (119 líneas)
+2. `backend/app/services/sql_database_service.py` - Servicio SQL (292 líneas)
+3. `backend/test_hybrid_system.py` - Script de verificación (118 líneas)
+4. `backend/HYBRID_ARCHITECTURE.md` - Documentación técnica completa
+
+**Endpoints nuevos:**
+- `POST /recommendations/generate-hybrid` - Matching híbrido
+- `GET /recommendations/stats` - Estadísticas del sistema
+
+**Para más detalles ver:**
+- `IMPLEMENTACION_COMPLETA.md` - Guía paso a paso
+- `backend/HYBRID_ARCHITECTURE.md` - Documentación técnica
+
+---
+
 ## 📋 Resumen Ejecutivo
 
 Se desarrolló exitosamente un **Sistema de Emparejamiento Docente-Curso** que utiliza técnicas de procesamiento de lenguaje natural (NLP) y aprendizaje automático para recomendar los docentes más adecuados para cada curso académico, basándose en el análisis semántico de CVs y sílabos.
@@ -20,11 +55,12 @@ Se desarrolló exitosamente un **Sistema de Emparejamiento Docente-Curso** que u
 - **Ranking inteligente** basado en similitud semántica y múltiples factores
 - **Interfaz web moderna** para facilitar el uso del sistema
 - **Integración completa** con Google Drive para gestión de documentos
+- **🆕 Arquitectura híbrida** SQL + ChromaDB para mayor precisión
 
 ### ✅ Objetivos Específicos
 1. **Procesamiento de documentos PDF** (CVs y sílabos)
 2. **Análisis semántico** usando modelos SBERT
-3. **Base de datos vectorial** para almacenamiento eficiente
+3. **🆕 Base de datos híbrida** (SQL relacional + vectorial)
 4. **API REST** para comunicación backend-frontend
 5. **Interfaz responsive** con navegación intuitiva
 6. **Sistema de despliegue** funcional en la nube
@@ -225,6 +261,7 @@ frontend/
 | ChromaDB | Latest | Base de datos vectorial |
 | Google Drive API | v3 | Gestión de documentos |
 | PyPDF2 | Latest | Procesamiento de PDFs |
+| SQLite | 3.8+ | Base de datos relacional |
 
 ### **Frontend**
 | Tecnología | Versión | Propósito |

@@ -1,18 +1,14 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from ..models.recommendation_models import RecommendationRequest, RecommendationResponse, TeacherRecommendation, ComponentScores
 from ..services.database_service import DatabaseService
+from ..services.sql_database_service import SQLDatabaseService
 from ..services.advanced_matching_service import AdvancedMatchingService
 
 router = APIRouter()
 
-db_service = DatabaseService()
+db_service = DatabaseService()  # ChromaDB (vectorial)
+sql_db_service = SQLDatabaseService()  # SQLite (relacional)
 matching_service = AdvancedMatchingService()
-
-class RecommendationRequest(BaseModel):
-    cycle_name: str
-    course_name: str
-    cv_folder_id: str
-    syllabus_folder_id: str
 
 @router.post("/recommendations/reset-database", tags=["Recommendations"])
 async def reset_database():
@@ -200,6 +196,208 @@ async def generate_recommendations(request: RecommendationRequest):
         print(f"Error inesperado: {e}")
         raise HTTPException(status_code=500, detail=f"Error al generar recomendaciones: {str(e)}")
 
+@router.post("/recommendations/generate-hybrid", tags=["Recommendations"])
+async def generate_hybrid_recommendations(request: RecommendationRequest):
+    """
+    NUEVO: Genera recomendaciones usando arquitectura híbrida SQL + ChromaDB.
+    
+    Flujo:
+    1. Busca el curso en SQL por nombre
+    2. Obtiene teachers que tengan al menos 1 skill requerida (filtro SQL)
+    3. Para cada candidato filtrado, calcula similitud semántica con ChromaDB
+    4. Combina scores: 40% SQL (skill match) + 60% ChromaDB (semantic similarity)
+    5. Retorna top 10 ordenados por score final
+    """
+    print(f"\n🔀 HYBRID MATCHING: {request.cycle_name} - {request.course_name}")
+    
+    try:
+        # === PASO 1: Buscar sílabo en ChromaDB para obtener embedding ===
+        syllabus_results = db_service.syllabus_collection.get(
+            include=["metadatas", "embeddings"]
+        )
+        
+        if not syllabus_results or not syllabus_results.get('metadatas'):
+            raise HTTPException(
+                status_code=404,
+                detail="No hay sílabos sincronizados en ChromaDB"
+            )
+        
+        # Buscar el sílabo que coincida
+        target_syllabus = None
+        target_embedding = None
+        target_embedding_id = None
+        
+        for i, metadata in enumerate(syllabus_results['metadatas']):
+            cycle_match = (request.cycle_name.lower() in metadata.get('cycle', '').lower() or 
+                          metadata.get('cycle', '').lower() in request.cycle_name.lower())
+            course_match = (request.course_name.lower() in metadata.get('course', '').lower() or 
+                           metadata.get('course', '').lower() in request.course_name.lower())
+            
+            if cycle_match and course_match:
+                target_syllabus = metadata
+                target_embedding = syllabus_results['embeddings'][i]
+                target_embedding_id = syllabus_results['ids'][i]
+                break
+        
+        if not target_syllabus:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No se encontró sílabo para {request.cycle_name} - {request.course_name}"
+            )
+        
+        print(f"✅ Sílabo encontrado: {target_syllabus.get('name')} (ID: {target_embedding_id})")
+        
+        # === PASO 2: Buscar curso en SQL para obtener required_skills ===
+        sql_courses = sql_db_service.get_all_courses()
+        target_course_sql = None
+        
+        for course in sql_courses:
+            if course.embedding_id == target_embedding_id:
+                target_course_sql = course
+                break
+        
+        if not target_course_sql:
+            print("⚠️  Curso no encontrado en SQL, usando solo ChromaDB")
+            # Fallback al endpoint antiguo
+            return await generate_recommendations(request)
+        
+        required_skill_names = [skill.name for skill in target_course_sql.required_skills]
+        print(f"📋 Required skills (SQL): {required_skill_names}")
+        
+        if not required_skill_names:
+            print("⚠️  No hay required skills en SQL, usando solo ChromaDB")
+            return await generate_recommendations(request)
+        
+        # === PASO 3: Filtrar teachers con SQL (al menos 1 skill match) ===
+        sql_candidates = sql_db_service.find_teachers_by_skills(required_skill_names, min_matches=1)
+        print(f"🔍 SQL filtró {len(sql_candidates)} teachers con skills coincidentes")
+        
+        if not sql_candidates:
+            return {
+                "cycle_name": request.cycle_name,
+                "course_name": request.course_name,
+                "syllabus_info": {
+                    "name": target_syllabus.get("name", "N/A"),
+                    "cycle": target_syllabus.get("cycle", "N/A"),
+                    "required_skills": required_skill_names
+                },
+                "recommendations": [],
+                "total_analyzed": 0,
+                "message": "No se encontraron docentes con las skills requeridas"
+            }
+        
+        # === PASO 4: Para cada candidato SQL, obtener similitud semántica de ChromaDB ===
+        hybrid_recommendations = []
+        
+        for teacher, sql_matches_count in sql_candidates:
+            # Calcular SQL score (porcentaje de skills que coinciden)
+            sql_score_detail = sql_db_service.calculate_sql_match_score(
+                teacher.id, 
+                target_course_sql.id
+            )
+            sql_score = sql_score_detail['score']
+            
+            # Obtener embedding del teacher desde ChromaDB
+            teacher_data = db_service.cv_collection.get(
+                ids=[teacher.embedding_id],
+                include=["embeddings", "metadatas"]
+            )
+            
+            if not teacher_data or not teacher_data.get('embeddings'):
+                print(f"  ⚠️  Teacher {teacher.name} no tiene embedding en ChromaDB")
+                continue
+            
+            teacher_embedding = teacher_data['embeddings'][0]
+            teacher_metadata = teacher_data['metadatas'][0]
+            
+            # Calcular similitud semántica (distancia L2 → similarity)
+            from numpy import dot
+            from numpy.linalg import norm
+            
+            # Cosine similarity (más preciso para vectores normalizados)
+            semantic_similarity = dot(target_embedding, teacher_embedding) / (
+                norm(target_embedding) * norm(teacher_embedding)
+            )
+            semantic_similarity = max(0.0, min(1.0, semantic_similarity))
+            
+            # === PASO 5: Combinar scores ===
+            # Pesos: 40% SQL (skill match) + 60% semántico (SBERT)
+            final_score = (0.4 * sql_score) + (0.6 * semantic_similarity)
+            
+            # Reconstruir entidades para explanation
+            if 'entities' in teacher_metadata:
+                cv_entities = teacher_metadata['entities']
+            else:
+                cv_entities = {
+                    'technical_skills': teacher_metadata.get('entities_technical_skills', '').split(', ') if teacher_metadata.get('entities_technical_skills') else [],
+                    'experience_years': int(teacher_metadata.get('entities_experience_years', 0)) if teacher_metadata.get('entities_experience_years', '').isdigit() else 0
+                }
+            
+            recommendation = {
+                "teacher_name": teacher.name,
+                "cv_filename": teacher_metadata.get("filename", "N/A"),
+                "score": final_score,
+                "component_scores": {
+                    "sql_score": sql_score,
+                    "semantic_similarity": semantic_similarity,
+                    "matched_skills_count": sql_matches_count,
+                    "total_required_skills": len(required_skill_names)
+                },
+                "explanation": {
+                    "matched_skills": sql_score_detail['matched_skills'],
+                    "missing_skills": sql_score_detail['missing_skills'],
+                    "teacher_skills": [s.name for s in teacher.skills],
+                    "experience_years": teacher.experience_years
+                }
+            }
+            
+            hybrid_recommendations.append(recommendation)
+            
+            # Guardar en historial
+            sql_db_service.save_matching_result(
+                teacher_id=teacher.id,
+                course_id=target_course_sql.id,
+                sql_score=sql_score,
+                semantic_score=semantic_similarity,
+                final_score=final_score,
+                matched_skills_count=sql_matches_count
+            )
+        
+        # === PASO 6: Ordenar por final_score y retornar top 10 ===
+        final_recommendations = sorted(
+            hybrid_recommendations, 
+            key=lambda x: x['score'], 
+            reverse=True
+        )[:10]
+        
+        print(f"✅ Generadas {len(final_recommendations)} recomendaciones híbridas")
+        
+        return {
+            "cycle_name": request.cycle_name,
+            "course_name": request.course_name,
+            "matching_method": "hybrid_sql_chromadb",
+            "syllabus_info": {
+                "name": target_syllabus.get("name", "N/A"),
+                "cycle": target_syllabus.get("cycle", "N/A"),
+                "required_skills": required_skill_names
+            },
+            "recommendations": final_recommendations,
+            "total_analyzed": len(hybrid_recommendations),
+            "weights": {
+                "sql_skill_match": "40%",
+                "semantic_similarity": "60%"
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error en hybrid matching: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error en matching híbrido: {str(e)}")
+
+
 @router.get("/recommendations/{syllabus_id}", tags=["Recommendations"])
 async def get_recommendations(syllabus_id: str):
     """
@@ -230,7 +428,7 @@ async def get_recommendations(syllabus_id: str):
                 'required_skills': syllabus_metadata.get('entities_required_skills', '').split(', ') if syllabus_metadata.get('entities_required_skills') else [],
                 'tools_required': syllabus_metadata.get('entities_tools_required', '').split(', ') if syllabus_metadata.get('entities_tools_required') else [],
                 'course_topics': syllabus_metadata.get('entities_course_topics', '').split(', ') if syllabus_metadata.get('entities_course_topics') else [],
-                'methodologies': syllabus_metadata.get('entities_methodologies', '').split(', ') if syllabus_metadata.get('entities_methodologies') else [],
+                'methodologies': syllabus_metadata.get('entities_methodologies', '').split(', ') if syllabus_metadata.get('entities_methodologias') else [],
                 'prerequisites': syllabus_metadata.get('entities_prerequisites', '').split(', ') if syllabus_metadata.get('entities_prerequisites') else []
             }
             # Limpiar entradas vacías
@@ -300,3 +498,25 @@ async def get_recommendations(syllabus_id: str):
         "recommendations": final_recommendations,
         "total_analyzed": len(advanced_recommendations)
     }
+
+@router.get("/recommendations/stats", tags=["Recommendations"])
+async def get_system_statistics():
+    """
+    Obtiene estadísticas del sistema de matching (SQL + ChromaDB).
+    """
+    try:
+        sql_stats = sql_db_service.get_statistics()
+        
+        # Stats de ChromaDB
+        cv_count = db_service.cv_collection.count()
+        syllabus_count = db_service.syllabus_collection.count()
+        
+        return {
+            "sql_database": sql_stats,
+            "chromadb": {
+                "total_cvs": cv_count,
+                "total_syllabi": syllabus_count
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener estadísticas: {str(e)}")

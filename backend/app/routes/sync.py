@@ -1,10 +1,11 @@
 from fastapi import APIRouter, HTTPException, Body
-from pydantic import BaseModel
+from ..models.sync_models import SyncRequest, SyncResponse
 from ..services.drive_service import DriveService
 from ..services.pdf_service import PDFService
 from ..services.nlp_service import NLPService
 from ..services.ner_service import NERService
 from ..services.database_service import DatabaseService
+from ..services.sql_database_service import SQLDatabaseService
 
 router = APIRouter()
 
@@ -13,11 +14,8 @@ drive_service = DriveService()
 pdf_service = PDFService()
 nlp_service = NLPService()
 ner_service = NERService()
-db_service = DatabaseService()
-
-class SyncRequest(BaseModel):
-    cv_folder_id: str
-    syllabus_folder_id: str
+db_service = DatabaseService()  # ChromaDB (vectorial)
+sql_db_service = SQLDatabaseService()  # SQLite (relacional)
 
 def process_file(file_id: str, file_name: str, collection_name: str, cycle_name: str = "", course_name: str = ""):
     """Función auxiliar para procesar un único archivo (CV o Sílabo)."""
@@ -59,8 +57,41 @@ def process_file(file_id: str, file_name: str, collection_name: str, cycle_name:
         metadata["course"] = course_name
         print(f"  -> Asociando con: ciclo='{cycle_name}', curso='{course_name}'")
     
+    # 1. Guardar en ChromaDB (embedding vectorial)
     db_service.add_embedding(collection_name, embedding, file_id, metadata)
-    print(f"  -> ✅ Procesado y guardado en '{collection_name}' con entidades extraídas.")
+    
+    # 2. Guardar en SQL (metadata estructurada)
+    try:
+        if collection_name == "cvs":
+            # Extraer skills del CV
+            skills_list = entities.get('technical_skills', [])
+            experience_years = entities.get('experience_years', 0)
+            teacher_name = file_name.replace('.pdf', '')
+            
+            teacher_id = sql_db_service.add_teacher(
+                name=teacher_name,
+                embedding_id=file_id,
+                skills_list=skills_list,
+                experience_years=experience_years
+            )
+            print(f"  -> ✅ Teacher guardado en SQL (ID: {teacher_id}) con {len(skills_list)} skills")
+        
+        else:  # syllabi
+            # Extraer required_skills del sílabo
+            required_skills = entities.get('required_skills', [])
+            
+            course_id = sql_db_service.add_course(
+                name=course_name,
+                cycle=cycle_name,
+                embedding_id=file_id,
+                required_skills=required_skills
+            )
+            print(f"  -> ✅ Course guardado en SQL (ID: {course_id}) con {len(required_skills)} required skills")
+    
+    except Exception as e:
+        print(f"  -> ⚠️ Error al guardar en SQL: {e}")
+    
+    print(f"  -> ✅ Procesado y guardado en ChromaDB + SQL con entidades extraídas.")
     return True
 
 @router.post("/sync", tags=["Sync"])
