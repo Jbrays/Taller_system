@@ -6,6 +6,9 @@ import { ArrowLeft, FolderFill, FileText, Trophy, ChevronRight } from 'react-boo
 // 🔧 Usar ngrok URL para producción, localhost para desarrollo
 const API_URL = 'https://scabrous-nestor-geometrically.ngrok-free.dev/api';
 
+// Configurar Axios para incluir header de ngrok en todas las peticiones
+axios.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
+
 function MainView() {
   const { config } = useContext(AppContext);
   const [currentView, setCurrentView] = useState('cycles'); // 'cycles', 'courses', 'recommendations'
