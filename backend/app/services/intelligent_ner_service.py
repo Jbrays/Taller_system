@@ -115,7 +115,22 @@ class IntelligentNERService:
                 if not self._is_institution_name(ent.text.lower()):
                     candidate_skills.add(ent.text.lower())
         
-        # 2. Extraer sustantivos propios y técnicos (análisis sintáctico)
+        # 2. IMPORTANTE: Extraer noun chunks (frases nominales multi-palabra)
+        # Esto captura "machine learning", "data analytics", "artificial intelligence", etc.
+        for chunk in doc.noun_chunks:
+            chunk_text = chunk.text.lower().strip()
+            # Solo chunks de 2-4 palabras que contengan términos técnicos
+            word_count = len(chunk_text.split())
+            if 2 <= word_count <= 4:
+                # Priorizar chunks que contienen palabras técnicas
+                technical_indicators = ['learning', 'data', 'analytics', 'intelligence', 'artificial',
+                                       'machine', 'deep', 'neural', 'augmented', 'virtual', 'reality',
+                                       'software', 'engineering', 'architecture', 'development',
+                                       'security', 'network', 'cloud', 'database', 'web', 'mobile']
+                if any(indicator in chunk_text for indicator in technical_indicators):
+                    candidate_skills.add(chunk_text)
+        
+        # 3. Extraer sustantivos propios y técnicos individuales (análisis sintáctico)
         for token in doc:
             # Sustantivos propios o sustantivos que parecen técnicos
             if token.pos_ in ['PROPN', 'NOUN'] and len(token.text) > 3:
@@ -126,29 +141,30 @@ class IntelligentNERService:
                     if token.text[0].isupper() or token.text.isupper():
                         candidate_skills.add(word_lower)
         
-        # 3. Análisis contextual: palabras después de frases clave
+        # 4. Análisis contextual: palabras/frases después de frases clave
         for context_phrase in self.skill_contexts:
-            pattern = re.compile(rf'{context_phrase}\s+([A-Za-záéíóúñÁÉÍÓÚÑ\s\-\.]+?)(?:\.|,|;|\n|$)', re.IGNORECASE)
+            # Capturar hasta 4 palabras después de la frase contextual
+            pattern = re.compile(rf'{context_phrase}\s+([A-Za-záéíóúñÁÉÍÓÚÑ]+(?:\s+[A-Za-záéíóúñÁÉÍÓÚÑ]+){{0,3}})(?:\.|,|;|\n|y\s|con\s|$)', re.IGNORECASE)
             matches = pattern.findall(text)
             for match in matches:
                 # Limpiar y agregar
                 cleaned = match.strip().lower()
-                if cleaned and len(cleaned) > 3 and cleaned not in self.stopwords:
+                if cleaned and 3 < len(cleaned) < 50 and cleaned not in self.stopwords:
                     candidate_skills.add(cleaned)
         
-        # 4. Detectar siglas y acrónimos (probablemente tecnologías)
+        # 5. Detectar siglas y acrónimos (probablemente tecnologías)
         acronyms = re.findall(r'\b[A-Z]{2,10}\b', text)
         for acronym in acronyms:
             if len(acronym) >= 2 and acronym.lower() not in self.stopwords:
                 candidate_skills.add(acronym.lower())
         
-        # 5. Detectar términos técnicos compuestos (con guiones o CamelCase)
+        # 6. Detectar términos técnicos compuestos (con guiones o CamelCase)
         technical_terms = re.findall(r'\b[A-Za-z]+\-[A-Za-z]+\b', text)
         for term in technical_terms:
             if len(term) > 4:
                 candidate_skills.add(term.lower())
         
-        # 6. Análisis de frecuencia: palabras que aparecen múltiples veces pero no son comunes
+        # 7. Análisis de frecuencia: palabras que aparecen múltiples veces pero no son comunes
         word_freq = self._calculate_word_frequency(text_lower)
         for word, freq in word_freq.items():
             # Aumentar umbral a 3+ para reducir ruido
@@ -159,7 +175,7 @@ class IntelligentNERService:
             if freq >= min_freq and len(word) > 4 and word not in self.stopwords:
                 candidate_skills.add(word)
         
-        # 7. Filtrado final: eliminar ruido
+        # 8. Filtrado final: eliminar ruido
         filtered_skills = self._filter_candidates(candidate_skills, text_lower)
         
         return sorted(list(filtered_skills))
